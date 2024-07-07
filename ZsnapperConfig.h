@@ -42,6 +42,8 @@ public:
     [[nodiscard]] std::string GetTargetDirectory() const;
     [[nodiscard]] std::vector<ZUpload> GetUploads() const;
     [[nodiscard]] std::vector<ZImport> GetImports() const;
+    [[nodiscard]] std::vector<std::string> GetApplyRetention() const;
+    int GetRetainDaily() const;
 };
 
 

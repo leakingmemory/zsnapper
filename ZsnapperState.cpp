@@ -13,6 +13,8 @@
 #include <sstream>
 #include <unistd.h>
 #include "Fork.h"
+#include <algorithm>
+#include <sys/stat.h>
 
 std::time_t GetNextDailyRun(const ZsnapperConfig &config) {
     std::time_t nowTm = std::time(nullptr);
@@ -255,6 +257,109 @@ void ZsnapperState::RunDaily(const std::string &iterationName) {
                 std::string cmd{"/usr/sbin/chown"};
                 std::cout << cmd << " -Rv " << own << " \"" << targetPathStr << "\"\n";
                 SimpleExec exec2{cmd, {"-Rv", own, targetPathStr}};
+            }
+        }
+    }
+    std::cout << " ==> Apply retention policy\n";
+    for (const auto &retentionDir : config.GetApplyRetention()) {
+        if (!std::filesystem::exists(retentionDir) || !std::filesystem::is_directory(retentionDir)) {
+            std::cerr << "Error: Is not a directory or does not exist: " << retentionDir << "\n";
+            continue;
+        }
+        std::vector<std::filesystem::path> items{};
+        for (const auto &dirItem : std::filesystem::directory_iterator(retentionDir)) {
+            std::filesystem::path p = dirItem.path();
+            std::string filename = p.filename();
+            if (filename == "." || filename == "..") {
+                continue;
+            }
+            items.emplace_back(p);
+        }
+        std::sort(items.begin(), items.end(), [] (auto p1, auto p2) {
+           struct stat st1{};
+           struct stat st2{};
+           std::string p1s = p1;
+           std::string p2s = p2;
+           bool p1ok = stat(p1s.c_str(), &st1) == 0;
+           bool p2ok = stat(p2s.c_str(), &st2) == 0;
+           if (!p1ok) {
+               if (!p2ok) {
+                   return false;
+               }
+               return true;
+           }
+           if (!p2ok) {
+               return false;
+           }
+           return st1.st_ctim.tv_sec < st2.st_ctim.tv_sec;
+        });
+        std::reverse(items.begin(), items.end());
+        auto iterator = items.begin();
+        if (iterator != items.end()) {
+            std::string firstItem = *iterator;
+            std::cout << " - Retaining: " << firstItem << "\n";
+            iterator = items.erase(iterator);
+            struct stat st{};
+            if (stat(firstItem.c_str(), &st) != 0) {
+                std::cerr << "Cannot stat item: " << firstItem << " (retention policy aborted)\n";
+                continue;
+            }
+            bool failure{false};
+            auto startOfCleanup = st.st_ctim.tv_sec + (23 * 3600);
+            typeof(startOfCleanup) refCleanup;
+            while (iterator != items.end()) {
+                std::string item = *iterator;
+                if (stat(item.c_str(), &st) != 0) {
+                    std::cerr << "Cannot stat item: " << firstItem << " (retention policy aborted)\n";
+                    failure = true;
+                    break;
+                }
+                refCleanup = st.st_ctim.tv_sec;
+                if (refCleanup >= startOfCleanup) {
+                    break;
+                }
+                std::cout << " - Retaining: " << item << "\n";
+                iterator = items.erase(iterator);
+            }
+            if (failure) {
+                continue;
+            }
+            startOfCleanup += (24 * 3600);
+            for (int i = 0; i < (config.GetRetainDaily() - 1) && iterator != items.end(); i++, startOfCleanup += (24 * 3600)) {
+                if (refCleanup >= startOfCleanup) {
+                    continue;
+                }
+                std::string item = *iterator;
+                std::cout << " - Retaining " << item << " (daily policy)\n";
+                iterator = items.erase(iterator);
+                while (iterator != items.end()) {
+                    item = *iterator;
+                    if (stat(item.c_str(), &st) != 0) {
+                        std::cerr << "Cannot stat item: " << firstItem << " (retention policy aborted)\n";
+                        failure = true;
+                        break;
+                    }
+                    refCleanup = st.st_ctim.tv_sec;
+                    if (refCleanup >= startOfCleanup) {
+                        break;
+                    }
+                    std::cout << " - Deleting " << item << " (daily policy)\n";
+                    ++iterator;
+                }
+                if (failure) {
+                    break;
+                }
+            }
+            if (failure) {
+                continue;
+            }
+            while (iterator != items.end()) {
+                std::cout << " - Deleting " << *iterator << " (beyond daily policy not impl)\n";
+                ++iterator;
+            }
+            for (const auto &itemToDelete : items) {
+                std::cout << " ---> Deleting " << itemToDelete << "\n";
+                std::filesystem::remove_all(itemToDelete);
             }
         }
     }

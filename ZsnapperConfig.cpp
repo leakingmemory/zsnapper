@@ -16,6 +16,11 @@ private:
     std::string targetDirectory{};
     std::vector<ZUpload> uploads{};
     std::vector<ZImport> imports{};
+    std::vector<std::string> applyRetention{};
+    int retainDaily{9};
+    int retainWeekly{5};
+    int retainMonthly{14};
+    int retainYearly{10};
 public:
     ZsnapperConfigData();
     ZsnapperConfigData(const std::string &filename);
@@ -178,6 +183,17 @@ ZsnapperConfigData::ZsnapperConfigData(const std::string &filename) {
                 }
             }
         }
+        if (jf.contains("applyRetention")) {
+            auto applyRetentionObj = jf.at("applyRetention");
+            if (applyRetentionObj.is_array()) {
+                for (const auto &appl : applyRetentionObj.items()) {
+                    if (!appl.value().is_string()) {
+                        continue;
+                    }
+                    applyRetention.emplace_back(appl.value());
+                }
+            }
+        }
     }
 }
 
@@ -212,4 +228,12 @@ std::vector<ZUpload> ZsnapperConfig::GetUploads() const {
 
 std::vector<ZImport> ZsnapperConfig::GetImports() const {
     return data->imports;
+}
+
+std::vector<std::string> ZsnapperConfig::GetApplyRetention() const {
+    return data->applyRetention;
+}
+
+int ZsnapperConfig::GetRetainDaily() const {
+    return data->retainDaily;
 }
