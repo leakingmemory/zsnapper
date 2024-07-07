@@ -161,4 +161,102 @@ void ZsnapperState::RunDaily(const std::string &iterationName) {
             }
         }
     }
+    std::cout << " ==> Uploads\n";
+    for (const auto &upload : config.GetUploads()) {
+        if (upload.ssh.empty()) {
+            std::cerr << "Error: Upload without ssh ignored\n";
+            continue;
+        }
+        if (upload.uploadDir.empty()) {
+            std::cerr << "Error: upload to " << upload.ssh << " has no uploadDirectory\n";
+            continue;
+        }
+        for (const auto &before : upload.before) {
+            std::string cmd{"/usr/bin/ssh"};
+            std::vector<std::string> args{};
+            args.emplace_back(upload.ssh);
+            std::cout << "# " << cmd << " \"" << upload.ssh << "\"";
+            for (const auto &cmd : before) {
+                std::cout << " \"" << cmd << "\"";
+                args.emplace_back(cmd);
+            }
+            std::cout << "\n";
+            SimpleExec simpleExec{cmd, args};
+        }
+        {
+            std::string cmd{"/usr/local/bin/rsync"};
+            std::string dir = targetDirectory;
+            if (dir.ends_with('/')) {
+                dir.resize(dir.size() - 1);
+            }
+            std::string target{upload.ssh};
+            target.append(":");
+            target.append(upload.uploadDir);
+            if (!target.ends_with('/')) {
+                target.append("/");
+            }
+            std::cout << cmd << " -av \"" << dir << "\" \"" << target << "\"\n";
+            std::vector<std::string> args{};
+            args.emplace_back("-av");
+            args.emplace_back(dir);
+            args.emplace_back(target);
+            SimpleExec exec{cmd, args};
+        }
+        for (const auto &after : upload.after) {
+            std::string cmd{"/usr/bin/ssh"};
+            std::vector<std::string> args{};
+            args.emplace_back(upload.ssh);
+            std::cout << "# " << cmd << " \"" << upload.ssh << "\"";
+            for (const auto &cmd : after) {
+                std::cout << " \"" << cmd << "\"";
+                args.emplace_back(cmd);
+            }
+            std::cout << "\n";
+            SimpleExec simpleExec{cmd, args};
+        }
+    }
+    std::cout << " ==> Imports\n";
+    for (const auto imp : config.GetImports()) {
+        if (imp.importFromDirectory.empty()) {
+            std::cerr << "Error: Ignored import without fromDirectory\n";
+            continue;
+        }
+        if (imp.targetDirectory.empty()) {
+            std::cerr << "Error: Ignored import " << imp.importFromDirectory << " because there is no target directory\n";
+            continue;
+        }
+        std::cout << "  ==> Import " << imp.importFromDirectory << " to " << imp.targetDirectory << "\n";
+        if (!std::filesystem::exists(imp.importFromDirectory) || !std::filesystem::is_directory(imp.importFromDirectory)) {
+            continue;
+        }
+        if (!std::filesystem::exists(imp.targetDirectory) || !std::filesystem::is_directory(imp.targetDirectory)) {
+            std::cerr << "Error: Target directory does not exist or is not a directory: " << imp.targetDirectory << "\n";
+            continue;
+        }
+        for (const auto &src : std::filesystem::directory_iterator(imp.importFromDirectory)) {
+            const std::filesystem::path &fullPath = src.path();
+            std::string fullPathStr = fullPath;
+            std::string name = fullPath.filename();
+            if (name == ".." || name == ".") {
+                continue;
+            }
+            std::filesystem::path targetPath = imp.targetDirectory;
+            targetPath = targetPath / name;
+            std::string targetPathStr = targetPath;
+            {
+                std::string cmd{"/bin/mv"};
+                std::cout << cmd << " -v \"" << fullPathStr << "\" \"" << targetPathStr << "\"\n";
+                SimpleExec exec1{cmd, {fullPathStr, targetPathStr}};
+            }
+            std::string own{imp.targetUid};
+            own.append(":");
+            own.append(imp.targetGid);
+            {
+                std::string cmd{"/usr/sbin/chown"};
+                std::cout << cmd << " -Rv " << own << " \"" << targetPathStr << "\"\n";
+                SimpleExec exec2{cmd, {"-Rv", own, targetPathStr}};
+            }
+        }
+    }
+    std::cout << " ==> Done with daily\n";
 }

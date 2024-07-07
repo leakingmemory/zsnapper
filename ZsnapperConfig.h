@@ -13,6 +13,20 @@ enum class ZsnapperType {
     Zfs
 };
 
+struct ZUpload {
+    std::string ssh;
+    std::string uploadDir;
+    std::vector<std::vector<std::string>> before;
+    std::vector<std::vector<std::string>> after;
+};
+
+struct ZImport {
+    std::string importFromDirectory;
+    std::string targetDirectory;
+    std::string targetUid{"root"};
+    std::string targetGid{"wheel"};
+};
+
 class ZsnapperConfigData;
 
 class ZsnapperConfig {
@@ -26,6 +40,8 @@ public:
     int GetMinutes() const;
     [[nodiscard]] std::vector<std::string> GetDaily() const;
     [[nodiscard]] std::string GetTargetDirectory() const;
+    [[nodiscard]] std::vector<ZUpload> GetUploads() const;
+    [[nodiscard]] std::vector<ZImport> GetImports() const;
 };
 
 
