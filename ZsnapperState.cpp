@@ -15,6 +15,8 @@
 #include "Fork.h"
 #include <algorithm>
 #include <sys/stat.h>
+#include <mutex>
+#include <thread>
 
 std::time_t GetNextDailyRun(const ZsnapperConfig &config) {
     std::time_t nowTm = std::time(nullptr);
@@ -136,31 +138,58 @@ void ZsnapperState::RunDaily(const std::string &iterationName) {
                 std::cerr << "Failed to create snapshot of " << src << "\n";
             }
         }
-        for (const auto &snapshot : snapshots) {
-            if (snapshot.GetSnapshotName().empty() || snapshot.GetSnapshorDirectory().empty()) {
-                continue;
-            }
-            try {
-                auto filename = snapshot.GetSnapshotName();
-                std::transform(filename.cbegin(), filename.cend(), filename.begin(), [] (char ch) { return ch == '/' ? '_' : ch; });
-                filename.append(".tar.bz2");
-                auto dir = snapshot.GetSnapshorDirectory();
-                std::filesystem::path path = targetDirectory / filename;
-                std::cout << " ==> " << dir << " to " << path << "\n";
-                Fork fork{[dir, path]() {
-                    if (chdir(dir.c_str()) != 0) {
-                        std::cerr << "Failed to chdir: " << dir << "\n";
-                        return 1;
+        {
+            std::mutex mtx{};
+            auto iterator = snapshots.begin();
+            std::vector<std::thread> threads{};
+            threads.reserve(config.GetConcurrency());
+            for (int i = 0; i < config.GetConcurrency(); i++) {
+                threads.emplace_back([&mtx, &iterator, &snapshots, targetDirectory] () {
+                    while (true) {
+                        ZfsSnapshot snapshot;
+                        {
+                            std::lock_guard lock{mtx};
+                            if (iterator == snapshots.end()) {
+                                break;
+                            }
+                            snapshot = *iterator;
+                            ++iterator;
+                        }
+                        if (snapshot.GetSnapshotName().empty() || snapshot.GetSnapshorDirectory().empty()) {
+                            continue;
+                        }
+                        try {
+                            auto filename = snapshot.GetSnapshotName();
+                            std::transform(filename.cbegin(), filename.cend(), filename.begin(), [] (char ch) { return ch == '/' ? '_' : ch; });
+                            filename.append(".tar.bz2");
+                            auto dir = snapshot.GetSnapshorDirectory();
+                            std::filesystem::path path = targetDirectory / filename;
+                            std::cout << " ==> " << dir << " to " << path << "\n";
+                            Fork fork{[dir, path]() {
+                                if (chdir(dir.c_str()) != 0) {
+                                    std::cerr << "Failed to chdir: " << dir << "\n";
+                                    return 1;
+                                }
+                                SimpleExec tarExec{"/usr/bin/tar", {"-cjvf", path, "."}};
+                                return 0;
+                            }, ForkInputOutput::NONE};
+                            fork.Require();
+                            std::cout << " ==> Done with " << dir << "\n";
+                        } catch (std::exception &e) {
+                            std::cerr << "Failed " << snapshot.GetSnapshotName() << ": " << e.what() << "\n";
+                        } catch (...) {
+                            std::cerr << "Failed " << snapshot.GetSnapshotName() << "\n";
+                        }
                     }
-                    SimpleExec tarExec{"/usr/bin/tar", {"-cjvf", path, "."}};
-                    return 0;
-                }, ForkInputOutput::NONE};
-                fork.Require();
-            } catch (std::exception &e) {
-                std::cerr << "Failed " << snapshot.GetSnapshotName() << ": " << e.what() << "\n";
-            } catch (...) {
-                std::cerr << "Failed " << snapshot.GetSnapshotName() << "\n";
+                });
             }
+
+            std::cout << " -- [awaiting threads] -- \n";
+            for (auto &thr : threads) {
+                thr.join();
+            }
+            std::cout << " -- [done with threads] -- \n";
+            threads.clear();
         }
     }
     std::cout << " ==> Uploads\n";

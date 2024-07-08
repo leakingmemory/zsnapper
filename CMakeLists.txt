@@ -26,6 +26,7 @@ add_executable(zsnapper main.cpp
         SimpleExec.h)
 
 target_link_libraries(zsnapper PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(zsnapper PRIVATE -lpthread)
 
 IF(${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
     target_include_directories(zsnapper PRIVATE /usr/local/include)

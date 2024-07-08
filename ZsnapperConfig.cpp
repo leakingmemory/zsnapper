@@ -21,6 +21,7 @@ private:
     int retainWeekly{5};
     int retainMonthly{14};
     int retainYearly{10};
+    int concurrency{2};
 public:
     ZsnapperConfigData();
     ZsnapperConfigData(const std::string &filename);
@@ -236,4 +237,8 @@ std::vector<std::string> ZsnapperConfig::GetApplyRetention() const {
 
 int ZsnapperConfig::GetRetainDaily() const {
     return data->retainDaily;
+}
+
+int ZsnapperConfig::GetConcurrency() const {
+    return data->concurrency;
 }
