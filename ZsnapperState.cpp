@@ -334,7 +334,7 @@ void ZsnapperState::RunDaily(const std::string &iterationName) {
                 continue;
             }
             bool failure{false};
-            auto startOfCleanup = st.st_ctim.tv_sec + (23 * 3600);
+            auto startOfCleanup = st.st_ctim.tv_sec - (23 * 3600);
             typeof(startOfCleanup) refCleanup;
             while (iterator != items.end()) {
                 std::string item = *iterator;
@@ -344,7 +344,7 @@ void ZsnapperState::RunDaily(const std::string &iterationName) {
                     break;
                 }
                 refCleanup = st.st_ctim.tv_sec;
-                if (refCleanup >= startOfCleanup) {
+                if (refCleanup <= startOfCleanup) {
                     break;
                 }
                 std::cout << " - Retaining: " << item << "\n";
@@ -353,9 +353,9 @@ void ZsnapperState::RunDaily(const std::string &iterationName) {
             if (failure) {
                 continue;
             }
-            startOfCleanup += (24 * 3600);
-            for (int i = 0; i < (config.GetRetainDaily() - 1) && iterator != items.end(); i++, startOfCleanup += (24 * 3600)) {
-                if (refCleanup >= startOfCleanup) {
+            startOfCleanup -= (24 * 3600);
+            for (int i = 0; i < (config.GetRetainDaily() - 1) && iterator != items.end(); i++, startOfCleanup -= (24 * 3600)) {
+                if (refCleanup <= startOfCleanup) {
                     continue;
                 }
                 std::string item = *iterator;
@@ -369,7 +369,7 @@ void ZsnapperState::RunDaily(const std::string &iterationName) {
                         break;
                     }
                     refCleanup = st.st_ctim.tv_sec;
-                    if (refCleanup >= startOfCleanup) {
+                    if (refCleanup <= startOfCleanup) {
                         break;
                     }
                     std::cout << " - Deleting " << item << " (daily policy)\n";
