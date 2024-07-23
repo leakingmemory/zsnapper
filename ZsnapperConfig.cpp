@@ -195,6 +195,24 @@ ZsnapperConfigData::ZsnapperConfigData(const std::string &filename) {
                 }
             }
         }
+        if (jf.contains("retentionDays")) {
+            auto retentionDaysObj = jf.at("retentionDays");
+            if (retentionDaysObj.is_number()) {
+                int retentionDay = retentionDaysObj;
+                if (retentionDay >= 0) {
+                    retainDaily = retentionDay;
+                }
+            }
+        }
+        if (jf.contains("retentionWeeks")) {
+            auto retentionWeeksObj = jf.at("retentionWeeks");
+            if (retentionWeeksObj.is_number()) {
+                int retentionWeek = retentionWeeksObj;
+                if (retentionWeek >= 0) {
+                    retainWeekly = retentionWeek;
+                }
+            }
+        }
     }
 }
 
@@ -237,6 +255,10 @@ std::vector<std::string> ZsnapperConfig::GetApplyRetention() const {
 
 int ZsnapperConfig::GetRetainDaily() const {
     return data->retainDaily;
+}
+
+int ZsnapperConfig::GetRetainWeekly() const {
+    return data->retainWeekly;
 }
 
 int ZsnapperConfig::GetConcurrency() const {

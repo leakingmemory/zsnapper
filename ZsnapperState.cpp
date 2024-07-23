@@ -79,6 +79,8 @@ void ZsnapperState::DumpConf() const {
         std::cout << " " << src << "\n";
     }
     std::cout << "Target dir: " << config.GetTargetDirectory() << "\n";
+    std::cout << "Default retention daily: " << config.GetRetainDaily() << "\n";
+    std::cout << "Default retention weekly: " << config.GetRetainWeekly() << "\n";
 }
 
 void ZsnapperState::RunPotentialIteration() {
@@ -382,8 +384,40 @@ void ZsnapperState::RunDaily(const std::string &iterationName) {
             if (failure) {
                 continue;
             }
+            startOfCleanup -= (7 * 24 * 3600);
+            for (int i = 0; i < (config.GetRetainWeekly() - 1) && iterator != items.end(); i++, startOfCleanup -= (7 * 24 * 3600)) {
+                if (refCleanup <= startOfCleanup) {
+                    continue;
+                }
+                std::string item = *iterator;
+                ++iterator;
+                while (iterator != items.end()) {
+                    std::cout << " - Deleting " << item << " (weekly policy)\n";
+                    item = *iterator;
+                    if (stat(item.c_str(), &st) != 0) {
+                        std::cerr << "Cannot stat item: " << firstItem << " (retention policy aborted)\n";
+                        failure = true;
+                        break;
+                    }
+                    refCleanup = st.st_ctim.tv_sec;
+                    if (refCleanup <= startOfCleanup) {
+                        break;
+                    }
+                    ++iterator;
+                }
+                if (!failure) {
+                    std::cout << " - Retaining " << item << " (weekly policy)\n";
+                    --iterator;
+                    iterator = items.erase(iterator);
+                } else {
+                    break;
+                }
+            }
+            if (failure) {
+                continue;
+            }
             while (iterator != items.end()) {
-                std::cout << " - Deleting " << *iterator << " (beyond daily policy not impl)\n";
+                std::cout << " - Deleting " << *iterator << " (beyond weekly policy not impl)\n";
                 ++iterator;
             }
             for (const auto &itemToDelete : items) {
@@ -392,5 +426,5 @@ void ZsnapperState::RunDaily(const std::string &iterationName) {
             }
         }
     }
-    std::cout << " ==> Done with daily\n";
+    std::cout << " ==> Done with jobs\n";
 }

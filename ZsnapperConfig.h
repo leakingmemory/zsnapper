@@ -44,6 +44,7 @@ public:
     [[nodiscard]] std::vector<ZImport> GetImports() const;
     [[nodiscard]] std::vector<std::string> GetApplyRetention() const;
     int GetRetainDaily() const;
+    int GetRetainWeekly() const;
     int GetConcurrency() const;
 };
 
